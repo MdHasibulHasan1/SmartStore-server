@@ -47,6 +47,7 @@ async function run() {
     const usersCollection = client.db('SmartStore').collection('users')
     const productsCollection = client.db('SmartStore').collection('products')
     const cartCollection = client.db('SmartStore').collection('carts')
+    const favoriteCollection = client.db('SmartStore').collection('favorites')
 
 
     app.post('/jwt', (req, res) => {
@@ -75,7 +76,44 @@ async function run() {
       res.send(result);
     });
 
-   
+    app.post('/products', async (req, res) => {
+      const result = await productsCollection.insertOne(req.body);
+      res.send(result);
+    });
+    app.get('/products', async (req, res) => {
+      const result = await productsCollection.find({ }).toArray();
+      res.send(result);
+    });
+
+    
+        // cart collection apis
+        app.get('/carts/:email',  async (req, res) => {
+          const email = req.params.email;
+          const query = { customerEmail: email };
+          const result = await cartCollection.find(query).toArray();
+          res.send(result);
+        });
+    
+        app.post('/carts', async (req, res) => {
+          const item = req.body;
+          const result = await cartCollection.insertOne(item);
+          res.send(result);
+        })
+    // delete from cart collection
+        app.delete('/deletefromcart/:id', async (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const result = await cartCollection.deleteOne(query);
+          res.send(result);
+        })
+    
+// favorites
+app.post('/favorites', async (req, res) => {
+  const item = req.body;
+  const result = await favoriteCollection.insertOne(item);
+  res.send(result);
+})
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
