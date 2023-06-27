@@ -49,11 +49,10 @@ async function run() {
     const productsCollection = client.db('SmartStore').collection('products')
     const cartCollection = client.db('SmartStore').collection('carts')
     const favoriteCollection = client.db('SmartStore').collection('favorites')
-    const commentCollection = client.db('SmartStore').collection('comments')
-
+   
     app.post('/jwt', (req, res) => {
       const user = req.body;
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1d' })
 
       res.send({ token })
     })
@@ -100,6 +99,14 @@ async function run() {
       }
     });
     
+
+    app.get('/productsByGenderOrCategory/:value', async(req, res) => {
+      const genderFilter = 'man'; 
+      const filterBy=req.query
+      const result =await productsCollection.find({ gender: genderFilter }).toArray();
+      res.send(result)
+    });
+    
     // cart collection APIs
     app.get('/carts/:email',  async (req, res) => {
       const email = req.params.email;
@@ -120,34 +127,65 @@ async function run() {
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     });
-    
     // favorites collection APIs
-    app.post('/favorites', async (req, res) => {
-      const item = req.body;
-      const result = await favoriteCollection.insertOne(item);
-      res.send(result);
+    app.post('/:email/favorites/:Id', async (req, res) => {
+      const {email, Id} = req.params;
+      console.log(email, Id);
+      const resultOfDelete = await favoriteCollection.deleteOne({productId:Id})
+        const result = await productsCollection.updateOne(
+          { 
+            _id: new ObjectId(Id), 
+          },
+          { $push: { favorites: email } }
+        );
+        res.send(result)
+        console.log(result);
     });
 
-    app.get('/favorites/:email', verifyJWT, async (req, res) => {
+    app.get('/favorites/:email',  async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const result = await favoriteCollection.find(query).toArray();
       res.send(result);
     });
 
-    // comment  APIs
+    app.post('/likes/:productId/:commentId', async (req, res) => {
+      const { productId, commentId } = req.params;
+      const { email } = req.body;
+    
+      try {
+        const result = await productsCollection.updateOne(
+          { 
+            _id: new ObjectId(productId), 
+            "commentsWithRatings.commentsId": Number(commentId) 
+          },
+          { $push: { "commentsWithRatings.$.likes": email } }
+        );
+    
+        if (result.modifiedCount === 1) {
+          res.sendStatus(200);
+        } else {
+          res.sendStatus(404);
+        }
+      } catch (error) {
+        console.error(error);
+        res.sendStatus(500);
+      }
+    });
+    
+// comment  APIs
 app.post('/comments/:id/ratings', async (req, res) => {
-  const flowerId = req.params.id;
+  const productId = req.params.id;
   const newCommentWithRating = req.body.newCommentWithRating;
-    // Find the product by ID and push the new comment and rating
+// Find the product by ID and push the new comment and rating
 const result = await productsCollection.findOneAndUpdate(
-      { _id: new ObjectId(flowerId) },
+      { _id: new ObjectId(productId) },
       { $push: { commentsWithRatings: newCommentWithRating } },
       { returnOriginal: false },
     );
     res.send(result);
 });
-/*  */
+
 // GET route to retrieve commentsWithRatings by product ID
 app.get('/products/:id/commentsWithRatings', async(req, res) => {
   const productId = req.params.id;
@@ -155,8 +193,6 @@ app.get('/products/:id/commentsWithRatings', async(req, res) => {
     const result = await productsCollection.findOne({ _id: new ObjectId(productId) });
   res.send(result.commentsWithRatings);
 });
-
-
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!')
