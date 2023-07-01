@@ -116,6 +116,35 @@ async function run() {
       res.send(result);
     });
 
+    app.patch('/cart/:productId', async (req, res) => {
+      const { productId } = req.params;
+      const { quantity } = req.body;
+      console.log(productId, quantity);
+      try {
+        // Find the cart item by productId
+        const cartItem = await cartCollection.findOne({productId: productId });
+        console.log(cartItem);
+        if (cartItem) {
+          // Calculate the updated quantity
+          const updatedQuantity = cartItem.quantity + quantity;
+          // Update the quantity of the cart product
+          const updateResult = await cartCollection.updateOne(
+            {productId: productId },
+            { $set: { quantity: updatedQuantity } }
+          );
+    
+          if (updateResult.modifiedCount === 1) {
+            res.status(200).json({ success: true, message: 'Cart product quantity updated successfully.' });
+          } else {
+            res.status(500).json({ success: false, message: 'Failed to update cart product quantity.' });
+          }
+        } else {
+          res.status(404).json({ success: false, message: 'Cart product not found.' });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    });
     
     
     app.post('/carts', async (req, res) => {
@@ -215,7 +244,7 @@ app.get('/products/:id/commentsWithRatings', async(req, res) => {
 })
 
 
-
+/* 
 app.post('/payments', async (req, res) => {
   const { paymentInfo } = req.body;
   const insertResult = await paymentCollection.insertOne(paymentInfo);
@@ -228,6 +257,29 @@ app.post('/payments', async (req, res) => {
     const { _id, quantity } = product;
     const updatedQuantity = quantity - quantities[index];
     await productsCollection.updateOne({ _id }, { $set: { quantity: updatedQuantity } });
+  });
+
+  await Promise.all(updatePromises);
+
+  const query = { _id: { $in: paymentInfo.cartItems.map(id => new ObjectId(id)) } };
+  const deleteResult = await cartCollection.deleteMany(query);
+
+  res.send({ insertResult, deleteResult });
+});
+ */app.post('/payments', async (req, res) => {
+  const { paymentInfo } = req.body;
+  const insertResult = await paymentCollection.insertOne(paymentInfo);
+  const quantities = paymentInfo.quantities.map(quantity => quantity);
+  const productIds = paymentInfo.products.map(id => new ObjectId(id));
+  const findProducts = await productsCollection.find({ _id: { $in: productIds } }).toArray();
+  console.log(findProducts);
+  console.log(quantities);
+  const updatePromises = findProducts.map(async (product, index) => {
+    const { _id, quantity, totalBought } = product;
+    const updatedQuantity = quantity - quantities[index];
+    const updatedTotalBought = (totalBought || 0) + quantities[index]; // Initialize to zero if totalBought is null
+    console.log(updatedTotalBought, totalBought)
+    await productsCollection.updateOne({ _id }, { $set: { quantity: updatedQuantity, totalBought: updatedTotalBought } });
   });
 
   await Promise.all(updatePromises);
