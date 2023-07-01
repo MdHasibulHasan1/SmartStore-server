@@ -3,9 +3,10 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb')
+
 require('dotenv').config();
 const app = express()
-
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -48,7 +49,7 @@ async function run() {
     const usersCollection = client.db('SmartStore').collection('users')
     const productsCollection = client.db('SmartStore').collection('products')
     const cartCollection = client.db('SmartStore').collection('carts')
-    const favoriteCollection = client.db('SmartStore').collection('favorites')
+    const paymentCollection = client.db('SmartStore').collection('payments')
    
     app.post('/jwt', (req, res) => {
       const user = req.body;
@@ -114,6 +115,8 @@ async function run() {
       const result = await cartCollection.find(query).toArray();
       res.send(result);
     });
+
+    
     
     app.post('/carts', async (req, res) => {
       const item = req.body;
@@ -211,6 +214,29 @@ app.get('/products/:id/commentsWithRatings', async(req, res) => {
   })
 })
 
+
+
+app.post('/payments', async (req, res) => {
+  const { paymentInfo } = req.body;
+  const insertResult = await paymentCollection.insertOne(paymentInfo);
+  const quantities = paymentInfo.quantities.map(quantity => quantity);
+  const productIds = paymentInfo.products.map(id => new ObjectId(id));
+  const findProducts = await productsCollection.find({ _id: { $in: productIds } }).toArray();
+  console.log(findProducts);
+  console.log(quantities);
+  const updatePromises = findProducts.map(async (product, index) => {
+    const { _id, quantity } = product;
+    const updatedQuantity = quantity - quantities[index];
+    await productsCollection.updateOne({ _id }, { $set: { quantity: updatedQuantity } });
+  });
+
+  await Promise.all(updatePromises);
+
+  const query = { _id: { $in: paymentInfo.cartItems.map(id => new ObjectId(id)) } };
+  const deleteResult = await cartCollection.deleteMany(query);
+
+  res.send({ insertResult, deleteResult });
+});
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
