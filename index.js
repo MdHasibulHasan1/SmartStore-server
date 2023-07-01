@@ -131,7 +131,7 @@ async function run() {
     app.post('/:email/favorites/:Id', async (req, res) => {
       const {email, Id} = req.params;
       console.log(email, Id);
-      const resultOfDelete = await favoriteCollection.deleteOne({productId:Id})
+      // const resultOfDelete = await favoriteCollection.deleteOne({productId:Id})
         const result = await productsCollection.updateOne(
           { 
             _id: new ObjectId(Id), 
@@ -193,6 +193,25 @@ app.get('/products/:id/commentsWithRatings', async(req, res) => {
     const result = await productsCollection.findOne({ _id: new ObjectId(productId) });
   res.send(result.commentsWithRatings);
 });
+
+
+// payment related api
+ // create payment intent
+ app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+  const { price, } = req.body
+  const amount = parseFloat(price) * 100
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: amount,
+    currency: 'usd',
+    payment_method_types: ['card'],
+  })
+
+  res.send({
+    clientSecret: paymentIntent.client_secret,
+  })
+})
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!')
