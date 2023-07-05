@@ -44,7 +44,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const usersCollection = client.db('SmartStore').collection('users')
     const productsCollection = client.db('SmartStore').collection('products')
@@ -57,6 +57,46 @@ async function run() {
 
       res.send({ token })
     })
+
+    // Update a user's role as an seller
+   app.patch('/users/seller/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role: 'seller' } }
+      );
+      if (result.modifiedCount === 1) {
+        res.json({ success: true, message: 'User role updated to seller' });
+      } else {
+        res.status(404).json({ success: false, message: 'User not found' });
+      }
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });
+
+  // Update a user's role as an admin
+  app.patch('/users/admin/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role: 'admin' } }
+      );
+
+      if (result.modifiedCount === 1) {
+        res.json({ success: true, message: 'User role updated to admin' });
+      } else {
+        res.status(404).json({ success: false, message: 'User not found' });
+      }
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });
 
     // users related APIs
     app.get('/users', async (req, res) => {
@@ -77,14 +117,97 @@ async function run() {
       res.send(result);
     });
 
+
+
+    
+  // Route to update product status to "approved"
+app.put('/product/approve/:id', async(req, res) => {
+  try {
+  const id = req.params.id;
+  console.log(id)
+  const result = await productsCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status: 'approved' } }
+  );
+  if (result.modifiedCount === 1) {
+    res.json({ success: true, message: 'product status updated to approve' });
+  } else {
+    res.status(404).json({ success: false, message: 'product not found' });
+  }
+} catch (error) {
+
+  res.status(500).json({ success: false, message: 'Internal server error' });
+}
+});
+
+// Route to update product status to "denied"
+app.put('/product/deny/:id', async(req, res) => {
+  try {
+    const id = req.params.id;
+    const result = await productsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'denied' } }
+    );
+    if (result.modifiedCount === 1) {
+      res.json({ success: true, message: 'product status updated to pending' });
+    } else {
+      res.status(404).json({ success: false, message: 'product not found' });
+    }
+  } catch (error) {
+
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
     // products related APIs
     app.post('/products', async (req, res) => {
       const result = await productsCollection.insertOne(req.body);
       res.send(result);
     });
-    
+    app.get('/approvedProducts',async (req, res) => {
+      const result = await productsCollection.find({ status: "approved" }).toArray();
+      res.send(result);
+    });
+// Update a Product by ID
+app.put("/myProduct/update/:id", async (req, res) => {
+  const id = req.params.id;
+  const body = req.body;
+  console.log(id, body);
+  const filter = { _id: new ObjectId(id) };
+  const updateDoc = {
+    $set: {
+      price: body.price,
+      image: body.image,
+      name: body.name,
+      quantity: body.quantity,
+      brand: body.brand,
+      discount: body.discount
+    },
+  };
+  const result = await productsCollection.updateOne(filter, updateDoc);
+  res.send(result);
+}); 
+// delete products by id
+app.delete('/myProduct/delete/:productId', async (req, res) => {
+  try {
+    const productId = req.params.productId;
+    const deleteQuery = { _id: new ObjectId(productId) };
+  const result = await productsCollection.deleteOne(deleteQuery);
+    res.send(result)
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// current seller product
+  app.get('/myProducts/:email',   async (req,  res) => {
+    const { email } = req.params;
+   
+    const result = await productsCollection.find({ sellerEmail: email }).toArray();
+    res.send(result);
+  });
     app.get('/products', async (req, res) => {
-      const result = await productsCollection.find({}).toArray();
+      const result = await productsCollection.find({}).sort({ date: -1 }).toArray();
       res.send(result);
     });
 
@@ -92,7 +215,7 @@ async function run() {
     app.get('/new/products', async (req, res) => {
       try {
         // Sort products by date in descending order
-        const result = await productsCollection.find().sort({ date: -1 }).toArray();
+        const result = await productsCollection.find({status: "approved"}).sort({ date: -1 }).limit(10).toArray();
         res.send(result);
       } catch (error) {
         console.error(error);
@@ -100,7 +223,15 @@ async function run() {
       }
     });
     
-
+    app.get("/popularProducts", async (req, res) => {
+      try {
+        const popularProducts = await productsCollection.find().sort({ totalBought: -1 }).limit(10).toArray();
+        res.json(popularProducts);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+  })
     app.get('/productsByGenderOrCategory/:value', async(req, res) => {
       const genderFilter = 'man'; 
       const filterBy=req.query
@@ -173,13 +304,36 @@ async function run() {
         res.send(result)
         console.log(result);
     });
-
-    app.get('/favorites/:email',  async (req, res) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const result = await favoriteCollection.find(query).toArray();
-      res.send(result);
+    // remove from favorite 
+    app.delete('/:email/favorites/:id', async (req, res) => {
+      const { email, id } = req.params;
+      console.log(email, id);
+      try {
+        const result = await productsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $pull: { favorites: email } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
     });
+    // http://localhost:5000/favorites/hasib7143@gmail.com
+    app.get('/favorites/:email', async (req, res) => {
+      const email = req.params.email;
+      console.log(email);
+      try {
+        const result = await productsCollection.find({ favorites: { $in: [email] } }).toArray();
+        res.send(result);
+        // console.log(result);
+        // const favorites = result.filter(product => product.favorites.includes(email));
+        // console.log(favorites);
+        // res.send(favorites);
+      } catch (error) {
+        res.status(500).json({ success: false, message: 'Internal server error.' });
+      }
+    });
+    
 
     app.post('/likes/:productId/:commentId', async (req, res) => {
       const { productId, commentId } = req.params;
@@ -244,29 +398,7 @@ app.get('/products/:id/commentsWithRatings', async(req, res) => {
 })
 
 
-/* 
-app.post('/payments', async (req, res) => {
-  const { paymentInfo } = req.body;
-  const insertResult = await paymentCollection.insertOne(paymentInfo);
-  const quantities = paymentInfo.quantities.map(quantity => quantity);
-  const productIds = paymentInfo.products.map(id => new ObjectId(id));
-  const findProducts = await productsCollection.find({ _id: { $in: productIds } }).toArray();
-  console.log(findProducts);
-  console.log(quantities);
-  const updatePromises = findProducts.map(async (product, index) => {
-    const { _id, quantity } = product;
-    const updatedQuantity = quantity - quantities[index];
-    await productsCollection.updateOne({ _id }, { $set: { quantity: updatedQuantity } });
-  });
-
-  await Promise.all(updatePromises);
-
-  const query = { _id: { $in: paymentInfo.cartItems.map(id => new ObjectId(id)) } };
-  const deleteResult = await cartCollection.deleteMany(query);
-
-  res.send({ insertResult, deleteResult });
-});
- */app.post('/payments', async (req, res) => {
+ app.post('/payments', async (req, res) => {
   const { paymentInfo } = req.body;
   const insertResult = await paymentCollection.insertOne(paymentInfo);
   const quantities = paymentInfo.quantities.map(quantity => quantity);
@@ -289,6 +421,36 @@ app.post('/payments', async (req, res) => {
 
   res.send({ insertResult, deleteResult });
 });
+
+app.get('/myPurchasedProduct/:email', async (req, res) => {
+  const { email } = req.params;
+
+  try {
+    const result = await paymentCollection
+      .find({ email: email })
+      .sort({ date: -1 }) // Sort by date in descending order
+      .toArray();
+/* for (const ids of result.products) {
+  const productInfo = await productsCollection.find({ _id: { $in: ids } }).toArray();
+
+  const purchasedProduct = result.map(payment => ({
+    payment,
+    productInfo: productInfo.filter(product => payment.products.includes(product._id))
+  }));
+
+} */
+    console.log(result);
+   
+    // res.send(purchasedProduct);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
